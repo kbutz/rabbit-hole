@@ -19,7 +19,7 @@ export REPO_NAME="rabbit-hole-repo"
 export SERVICE_ACCOUNT_NAME="github-actions-sa"
 export POOL_NAME="github-actions-pool"
 export PROVIDER_NAME="github-actions-provider"
-export GITHUB_REPO="your-username/rabbit-hole" # e.g., "jules/rabbit-hole"
+export GITHUB_REPO="USER_OR_ORG/rabbit-hole" # e.g., "jules/rabbit-hole"
 ```
 
 ## 2. Enable APIs
