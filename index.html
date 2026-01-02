@@ -1,0 +1,148 @@
+<!-- index.html -->
+<html>
+<head>
+    <title>Rabbit Hole</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+        }
+        #graph-container {
+            width: 100%;
+            height: 100%;
+        }
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: #333;
+            z-index: 10;
+        }
+        #input-container {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            z-index: 10;
+        }
+        #input-container input {
+            padding: 8px;
+            font-size: 14px;
+            width: 300px;
+        }
+    </style>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+    <div id="title">Rabbit Hole</div>
+    <div id="input-container">
+        <input type="text" id="topic-input" placeholder="Enter a topic and press Enter...">
+    </div>
+    <div id="graph-container"></div>
+
+    <script type="text/javascript">
+        const container = document.getElementById('graph-container');
+        const topicInput = document.getElementById('topic-input');
+        const nodes = new vis.DataSet();
+        const edges = new vis.DataSet();
+        let network = null;
+
+        const data = { nodes: nodes, edges: edges };
+        const options = {
+            nodes: {
+                shape: 'dot',
+                size: 16,
+                font: {
+                    size: 14,
+                    color: '#333'
+                },
+                borderWidth: 2
+            },
+            edges: {
+                width: 1
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 200
+            },
+            physics: {
+                forceAtlas2Based: {
+                    gravitationalConstant: -26,
+                    centralGravity: 0.005,
+                    springLength: 230,
+                    springConstant: 0.18
+                },
+                maxVelocity: 146,
+                solver: 'forceAtlas2Based',
+                timestep: 0.35,
+                stabilization: { iterations: 150 }
+            }
+        };
+
+        function addNode(topic) {
+            if (!nodes.get(topic)) {
+                nodes.add({ id: topic, label: topic, title: `Expand ${topic}` });
+            }
+        }
+
+        async function expandTopic(topic) {
+            addNode(topic);
+            try {
+                const response = await fetch(`/expand?topic=${encodeURIComponent(topic)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                if (data.related && data.related.length > 0) {
+                    data.related.forEach(relatedTopic => {
+                        if (!nodes.get(relatedTopic)) {
+                            addNode(relatedTopic);
+                            edges.add({ from: topic, to: relatedTopic });
+                        }
+                    });
+                } else {
+                    console.warn(`No related topics found for ${topic}`);
+                }
+            } catch (error) {
+                console.error('Error expanding topic:', error);
+            }
+            network.fit();
+        }
+
+        function startNewTopic(topic) {
+            nodes.clear();
+            edges.clear();
+            expandTopic(topic);
+        }
+
+        function initNetwork() {
+            network = new vis.Network(container, data, options);
+
+            network.on("click", function (params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    expandTopic(nodeId);
+                }
+            });
+
+            topicInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const topic = topicInput.value.trim();
+                    if (topic) {
+                        startNewTopic(topic);
+                    }
+                }
+            });
+        }
+
+        initNetwork();
+    </script>
+
+</body>
+</html>
