@@ -172,15 +172,14 @@ Ensure a file named `policy.json` exists in the root of your repository with the
     "name": "delete-old-images",
     "action": {"type": "Delete"},
     "condition": {
-      "tagState": "any",
+      "tagState": "ANY",
       "olderThan": "7d"
     }
   },
   {
     "name": "keep-last-3-images",
     "action": {"type": "Keep"},
-    "condition": {
-      "tagState": "any",
+    "mostRecentVersions": {
       "keepCount": 3
     }
   }
@@ -192,6 +191,18 @@ Ensure you ran the permission command in **Step 5** using `roles/artifactregistr
 
 **3. Workflow Automation**
 The GitHub Action is configured to run `gcloud artifacts repositories set-cleanup-policies` using this file on every deploy.
+
+**4. Verify the Policy**
+To confirm the policy is active, run:
+
+```bash
+gcloud artifacts repositories list-cleanup-policies "${REPO_NAME}" \
+    --project="${PROJECT_ID}" \
+    --location="${REGION}"
+```
+
+**Expected Output:** You should see a JSON list containing the `delete-old-images` and `keep-last-3-images` rules.
+**If it fails:** If the output is `[]` (empty), the policy has not been applied. Ensure your GitHub Action run completed successfully.
 
 ### C. Free Tier Compliance Summary
 
