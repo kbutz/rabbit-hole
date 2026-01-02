@@ -2,7 +2,8 @@
 
 **Rabbit Hole** is a web-based visualization tool designed to help users explore ideas and connections. It starts with a single topic and lets you "fall down the rabbit hole" by expanding nodes to reveal related concepts, creating an infinite, interactive knowledge graph.
 
-![Rabbit Hole Interface](./assets/screenshot.jpg)
+<img width="838" height="817" alt="Screenshot 2026-01-02 at 3 26 24 PM" src="https://github.com/user-attachments/assets/5e27fef1-b7fc-4dab-b72b-dcb5e36693a3" />
+
 
 ## About the Project
 
