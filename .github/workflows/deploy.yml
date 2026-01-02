@@ -41,6 +41,13 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Apply Artifact Registry Cleanup Policy
+        run: |
+          gcloud artifacts repositories set-cleanup-policies ${{ env.REPOSITORY }} \
+            --project=${{ env.PROJECT_ID }} \
+            --location=${{ env.REGION }} \
+            --policy=gcloud_artifact_registry_cleanup_policy.json
+
       - name: Authorize Docker push
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
