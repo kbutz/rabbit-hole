@@ -1,12 +1,17 @@
 [
-    {
-      "name": "delete-old-images",
-      "action": {"type": "Delete"},
-      "condition": {"tagState": "any", "olderThan": "7d"}
-    },
-    {
-      "name": "keep-last-3-images",
-      "action": {"type": "Keep"},
-      "condition": {"tagState": "any", "keepCount": 3}
+  {
+    "name": "delete-old-images",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "ANY",
+      "olderThan": "7d"
     }
+  },
+  {
+    "name": "keep-last-3-images",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {
+      "keepCount": 3
+    }
+  }
 ]

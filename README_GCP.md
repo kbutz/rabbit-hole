@@ -70,15 +70,17 @@ export POOL_ID=$(gcloud iam workload-identity-pools describe "${POOL_NAME}" \
 
 ### Create the OIDC Provider:
 
+**Note:** We explicitly map the repository attribute so GitHub Actions can authenticate correctly.
+
 ```bash
 gcloud iam workload-identity-pools providers create-oidc "${PROVIDER_NAME}" \
     --project="${PROJECT_ID}" \
     --location="global" \
     --workload-identity-pool="${POOL_NAME}" \
     --display-name="GitHub Actions Provider" \
-    --attribute-mapping="google.subject=assertion.sub" \
-    --attribute-condition="assertion.sub == 'repo:${GITHUB_REPO}:*'" \
-    --issuer-uri="https://token.actions.githubusercontent.com"
+    --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+    --attribute-condition="assertion.repository == '${GITHUB_REPO}'" \
+    --issuer-uri="[https://token.actions.githubusercontent.com](https://token.actions.githubusercontent.com)"
 ```
 
 ## 5. Service Account Setup
@@ -93,24 +95,25 @@ gcloud iam service-accounts create "${SERVICE_ACCOUNT_NAME}" \
 
 ### Grant Permissions:
 
-Grant the service account permissions to push to Artifact Registry and deploy to Cloud Run.
+Grant the service account permissions to push to Artifact Registry, deploy to Cloud Run, and manage cleanup policies.
 
 ```bash
-# Allow pushing to Artifact Registry
+# Allow pushing AND managing cleanup policies (Admin role required for CI cleanup)
 gcloud artifacts repositories add-iam-policy-binding "${REPO_NAME}" \
     --project="${PROJECT_ID}" \
     --location="${REGION}" \
     --member="serviceAccount:${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/artifactregistry.writer"
+    --role="roles/artifactregistry.admin"
 
 # Allow deploying to Cloud Run
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/run.admin"
 
-# Allow the GitHub SA to pass the runtime SA to the Cloud Run service
+# Allow the GitHub SA to pass itself to the Cloud Run service
 gcloud iam service-accounts add-iam-policy-binding \
-    "${PROJECT_ID}-compute@developer.gserviceaccount.com" \
+    "${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --project="${PROJECT_ID}" \
     --member="serviceAccount:${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/iam.serviceAccountUser"
 ```
@@ -123,7 +126,7 @@ Allow the GitHub repository to impersonate the service account.
 gcloud iam service-accounts add-iam-policy-binding "${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --project="${PROJECT_ID}" \
     --role="roles/iam.workloadIdentityUser" \
-    --member="principalSet://iam.googleapis.com/${POOL_ID}/attribute.repository/${GITHUB_REPO}"
+    --member="principalSet://[iam.googleapis.com/$](https://iam.googleapis.com/$){POOL_ID}/attribute.repository/${GITHUB_REPO}"
 ```
 
 ## 6. GitHub Secrets
@@ -156,13 +159,14 @@ This is the most important step. It won't stop the services, but it will email y
 2.  Select **Budgets & alerts**.
 3.  Create a budget for **$1.00** and set alerts at 50%, 90%, and 100%.
 
-### B. Artifact Registry Cleanup Policy
+### B. Artifact Registry Cleanup Policy (Automated in CI)
 
-Artifact Registry charges for storage. Every time your GitHub Action runs, it pushes a new container image (~100MB+). Over time, this adds up. Add a cleanup policy to automatically delete old images.
+Artifact Registry charges for storage. To keep costs low, we automatically enforce a cleanup policy during every deployment.
 
-```bash
-# Create a cleanup policy file
-cat <<EOF > policy.json
+**1. Create the `policy.json` file**
+Ensure a file named `policy.json` exists in the root of your repository with the following content:
+
+```json
 [
   {
     "name": "delete-old-images",
@@ -181,14 +185,13 @@ cat <<EOF > policy.json
     }
   }
 ]
-EOF
-
-# Apply the policy to your repository
-gcloud artifacts repositories set-cleanup-policies "${REPO_NAME}" \
-    --project="${PROJECT_ID}" \
-    --location="${REGION}" \
-    --policy=policy.json
 ```
+
+**2. Verify Permissions**
+Ensure you ran the permission command in **Step 5** using `roles/artifactregistry.admin`. The default "Writer" role is insufficient for applying cleanup policies.
+
+**3. Workflow Automation**
+The GitHub Action is configured to run `gcloud artifacts repositories set-cleanup-policies` using this file on every deploy.
 
 ### C. Free Tier Compliance Summary
 
@@ -197,13 +200,9 @@ To keep "Rabbit Hole" free, ensure these settings remain in place:
 | Resource | Free Tier Limit | Your Setup Status |
 | :--- | :--- | :--- |
 | **Cloud Run** | First 2M requests/month | **Safe** (You have `--min-instances=0`) |
-| **Artifact Registry** | 0.5 GB storage/month | **Caution** (Need the cleanup policy above) |
+| **Artifact Registry** | 0.5 GB storage/month | **Safe** (Cleanup policy runs on every deploy) |
 | **Cloud Build** | 120 build-minutes/day | **Safe** (You are using GitHub Actions, not Cloud Build) |
 | **Egress (Data out)** | 1 GB/month | **Safe** (Assuming low traffic for a personal demo) |
-
-### D. OpenAI API Costs
-
-The `OPENAI_API_KEY` is for a third-party service and is not part of your Google Cloud bill. You are responsible for any costs associated with your use of the OpenAI API. Make sure to monitor your usage and set up any necessary billing alerts on the OpenAI platform.
 
 ## 8. Verify
 
