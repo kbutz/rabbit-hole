@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+# Prevent multiple concurrent deployments
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }} # Setup this secret in GitHub
   REGION: us-central1 # Update if needed
@@ -56,7 +61,8 @@ jobs:
             --port=8080
             --allow-unauthenticated
             --min-instances=0
-            --max-instances=10
+            --max-instances=1 # Keep it at 1 to stay within the free tier for a demo
             --service-account=${{ env.SERVICE_ACCOUNT }}
           env_vars: |
+            # This is a secret, so it's passed in as an environment variable
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}

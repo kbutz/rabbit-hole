@@ -76,7 +76,8 @@ gcloud iam workload-identity-pools providers create-oidc "${PROVIDER_NAME}" \
     --location="global" \
     --workload-identity-pool="${POOL_NAME}" \
     --display-name="GitHub Actions Provider" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+    --attribute-mapping="google.subject=assertion.sub" \
+    --attribute-condition="assertion.sub == 'repo:${GITHUB_REPO}:*'" \
     --issuer-uri="https://token.actions.githubusercontent.com"
 ```
 
@@ -107,9 +108,9 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/run.admin"
 
-# Allow the service account to act as itself (needed for Cloud Run runtime identity)
+# Allow the GitHub SA to pass the runtime SA to the Cloud Run service
 gcloud iam service-accounts add-iam-policy-binding \
-    "${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    "${PROJECT_ID}-compute@developer.gserviceaccount.com" \
     --member="serviceAccount:${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/iam.serviceAccountUser"
 ```
@@ -143,6 +144,67 @@ gcloud iam workload-identity-pools providers describe "${PROVIDER_NAME}" \
 
 4.  `OPENAI_API_KEY`: (Optional) If you are using OpenAI features, add your API key here.
 
-## 7. Verify
+## 7. Cost Management and Guardrails
+
+This project uses Google Cloud services that have a free tier, but it's critical to set up guardrails to avoid unexpected charges.
+
+### A. Set a Billing Budget & Alert
+
+This is the most important step. It won't stop the services, but it will email you the second you hit a threshold (e.g., $1.00).
+
+1.  Go to the **Billing** section in the GCP Console.
+2.  Select **Budgets & alerts**.
+3.  Create a budget for **$1.00** and set alerts at 50%, 90%, and 100%.
+
+### B. Artifact Registry Cleanup Policy
+
+Artifact Registry charges for storage. Every time your GitHub Action runs, it pushes a new container image (~100MB+). Over time, this adds up. Add a cleanup policy to automatically delete old images.
+
+```bash
+# Create a cleanup policy file
+cat <<EOF > policy.json
+[
+  {
+    "name": "delete-old-images",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "olderThan": "7d"
+    }
+  },
+  {
+    "name": "keep-last-3-images",
+    "action": {"type": "Keep"},
+    "condition": {
+      "tagState": "any",
+      "keepCount": 3
+    }
+  }
+]
+EOF
+
+# Apply the policy to your repository
+gcloud artifacts repositories set-cleanup-policies "${REPO_NAME}" \
+    --project="${PROJECT_ID}" \
+    --location="${REGION}" \
+    --policy=policy.json
+```
+
+### C. Free Tier Compliance Summary
+
+To keep "Rabbit Hole" free, ensure these settings remain in place:
+
+| Resource | Free Tier Limit | Your Setup Status |
+| :--- | :--- | :--- |
+| **Cloud Run** | First 2M requests/month | **Safe** (You have `--min-instances=0`) |
+| **Artifact Registry** | 0.5 GB storage/month | **Caution** (Need the cleanup policy above) |
+| **Cloud Build** | 120 build-minutes/day | **Safe** (You are using GitHub Actions, not Cloud Build) |
+| **Egress (Data out)** | 1 GB/month | **Safe** (Assuming low traffic for a personal demo) |
+
+### D. OpenAI API Costs
+
+The `OPENAI_API_KEY` is for a third-party service and is not part of your Google Cloud bill. You are responsible for any costs associated with your use of the OpenAI API. Make sure to monitor your usage and set up any necessary billing alerts on the OpenAI platform.
+
+## 8. Verify
 
 Push to the `main` branch to trigger the workflow.
